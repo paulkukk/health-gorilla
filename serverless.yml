@@ -1,0 +1,124 @@
+# Welcome to Serverless!
+#
+# This file is the main config file for your service.
+# It's very minimal at this point and uses default values.
+# You can always add more config options for more control.
+# We've included some commented out config examples here.
+# Just uncomment any of them to get that config option.
+#
+# For full config options, check the docs:
+#    docs.serverless.com
+#
+# Happy Coding!
+
+service: fhir
+# app and org for use with dashboard.serverless.com
+#app: your-app-name
+#org: your-org-name
+
+# You can pin your service to only deploy with a specific Serverless version
+# Check out our docs for more details
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: python3.8
+  lambdaHashingVersion: 20201221
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  eventBridge:
+    useCloudFormation: true
+  memorySize: ${self:custom.memory.${self:provider.stage}}
+  vpc:
+    securityGroupIds:
+      # PROD
+      # - sg-018c7d075e4aa04c8
+      - sg-04b321c70668a3647
+
+    subnetIds:
+      # PROD
+      # - subnet-095a2c43946fbecee
+      # - subnet-0e8c05baaeb75bfd3
+      - subnet-0b261d64d0c604ae9
+      - subnet-04561d9bebff0ffd9
+  # resource tags
+  stackTags:
+    Product: Schema Checker
+    Environment: ${self:custom.environments.${self:provider.stage}}
+  # cloudwatch log retention
+  logRetentionInDays: ${self:custom.logRetentionInDays.${self:provider.stage}}
+
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - "secretsmanager:GetSecretValue"
+      Resource: '*'
+    - Effect: "Allow"
+      Action:
+        - 'rds-db:connect'
+      Resource:
+        # THIS MUST BE VERIFIED PRIOR TO DEPLOYMENT!!!
+        # PROD
+        # - 'arn:aws:rds-db:us-east-1:380527979056:dbuser:*/ods_rw'
+        - 'arn:aws:rds-db:us-east-1:552976943944:dbuser:*/ods_rw'
+
+package:
+  exclude:
+    - config.ini
+    - venv/**
+    - Config.py
+    - .gitignore
+    - .serverless/**
+    - node_modules/**
+    # - requirements.txt
+
+
+functions:
+  # put the functions here
+  run-checkhandler:
+    # code entry
+    handler: handler.run_salesforce
+    # description
+    description: Function pulls back data from Salesforce
+    layers:
+      - Ref: PythonRequirementsLambdaLayer
+    # configure memory setting
+    memorySize: 1024
+    # timeout
+    timeout: 900
+    # triggers
+    events:
+      #schedule
+      - eventBridge:
+        # schedule: cron(00 06 ? * 3-7 *)
+        # Run every day / every four hours
+        schedule: cron(0 0/6 * * ? *)
+
+custom:
+  # docker build requirements
+  pythonRequirements:
+    dockerizePip: non-linux
+    layer:
+      name: ${self:provider.stage}-layerName
+      description: Python requirements lambda layer
+      compatibleRuntimes:
+        - python3.7
+      licenseInfo: GPLv3
+    noDeploy:
+      - boto3
+  # environments mapping
+  environments:
+    dev: DEV
+    prod: PROD
+  # memory settings
+  memory:
+    dev: 512
+    prod: 1024
+  # log retention
+  logRetentionInDays:
+    dev: 30
+    prod: 90
+
+plugins:
+  - serverless-python-requirements
+  - serverless-plugin-aws-alerts
